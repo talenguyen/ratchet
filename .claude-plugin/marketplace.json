@@ -1,0 +1,14 @@
+{
+  "name": "ratchet",
+  "owner": {
+    "name": "Giang Nguyen"
+  },
+  "plugins": [
+    {
+      "name": "ratchet",
+      "source": "./",
+      "description": "Contract-verified, security/quality/consistency-gated build loop for coding agents.",
+      "version": "0.1.0"
+    }
+  ]
+}

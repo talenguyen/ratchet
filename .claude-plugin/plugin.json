@@ -1,0 +1,8 @@
+{
+  "name": "ratchet",
+  "version": "0.1.0",
+  "description": "Contract-verified, security/quality/consistency-gated build loop for coding agents.",
+  "author": {
+    "name": "Giang Nguyen"
+  }
+}
