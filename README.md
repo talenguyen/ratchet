@@ -5,6 +5,12 @@ plain-language goal into an approved, executable contract (2–4 `contract-check
 gates Write/Edit capability on an approved contract, and verifies the build against the contract
 plus security, quality, and consistency gates — never against the worker's own report.
 
+## Architecture
+
+For a newcomer's overview of how the pieces fit together — the contract → gate → build → verify
+loop, the skill/commands/scripts/hook component layout, the code-vs-state split, and an
+end-to-end walkthrough of `/build-with-ratchet` — see [ARCHITECTURE.md](ARCHITECTURE.md).
+
 ## Install
 
 This repo is its own marketplace: the root `.claude-plugin/marketplace.json` points at the repo
