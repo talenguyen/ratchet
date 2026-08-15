@@ -17,7 +17,7 @@ def test_sample_rate_increases_with_risk_flags():
 
 def test_sample_rate_is_clamped_between_zero_and_one():
     assert audit.sample_rate(consecutive_clean_passes=0, risk_flag_count=100) == 1.0
-    assert audit.sample_rate(consecutive_clean_passes=1000, risk_flag_count=0) == 0.0
+    assert audit.sample_rate(consecutive_clean_passes=1000, risk_flag_count=0) == 0.1
 
 
 def test_should_sample_is_deterministic_for_the_same_seed():
@@ -40,3 +40,10 @@ def test_log_sample_decision_appends_a_line(tmp_path):
     text = log_path.read_text(encoding="utf-8")
     assert "add-widget" in text
     assert "SAMPLED" in text
+
+
+def test_sample_rate_never_reaches_zero():
+    # The old bug: 10 consecutive clean passes drove the rate to exactly 0.0.
+    assert audit.sample_rate(consecutive_clean_passes=10, risk_flag_count=0) > 0.0
+    assert audit.sample_rate(consecutive_clean_passes=10, risk_flag_count=0) == 0.1
+    assert audit.sample_rate(consecutive_clean_passes=1000, risk_flag_count=0) == 0.1

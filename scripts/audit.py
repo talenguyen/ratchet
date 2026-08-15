@@ -15,17 +15,21 @@ def sample_rate(
     base_rate: float = 0.2,
     decay_per_clean_pass: float = 0.02,
     boost_per_risk_flag: float = 0.15,
+    floor: float = 0.1,
 ) -> float:
     """Sample rate falls as a domain's track record grows and rises with risk flags.
 
     All four numeric parameters are operator-tunable knobs (design spec section 15
     explicitly disclaims any prescribed methodology constant) -- these defaults are this
     implementation's starting point, not a methodology claim.
+
+    `floor` is new: human spot-checking must never mathematically reach zero, regardless of how
+    long a track record runs clean. Also an operator-tunable knob (design spec section 15).
     """
     rate = base_rate - (decay_per_clean_pass * consecutive_clean_passes) + (
         boost_per_risk_flag * risk_flag_count
     )
-    return max(0.0, min(1.0, rate))
+    return max(floor, min(1.0, rate))
 
 
 def should_sample(rate: float, seed: str) -> bool:
