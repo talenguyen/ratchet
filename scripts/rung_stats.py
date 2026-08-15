@@ -84,6 +84,7 @@ def lookup_starting_rung(
     providers_path: Path,
     task_class: str,
     min_pass_rate: float = 0.8,
+    min_attempts: int = 3,
 ) -> RungEntry | None:
     """Return the cheapest allowed rung with enough passing evidence for this task class.
 
@@ -96,6 +97,9 @@ def lookup_starting_rung(
     `min_pass_rate` and is currently allowed by `providers_path` — a cold
     start has nothing to look up, and the caller must pick a rung manually
     from the allow-list instead of receiving a fabricated ranking.
+
+    `min_attempts` is new: a single lucky run no longer qualifies as a proven rung. Also an
+    operator-tunable knob (design spec section 15), default 3.
     """
     from scripts.providers import allowed_pairs
 
@@ -106,6 +110,7 @@ def lookup_starting_rung(
         if e.task_class == task_class
         and (e.provider, e.model) in allowed
         and e.pass_rate >= min_pass_rate
+        and e.attempts >= min_attempts
     ]
     if not candidates:
         return None

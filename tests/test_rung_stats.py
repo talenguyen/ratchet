@@ -78,6 +78,18 @@ def test_lookup_starting_rung_picks_cheapest_allowed_passing_entry(tmp_path):
         rung_path, "rename-mechanical", "opencode-go", "deepseek-v4-flash", True, 0.01, 5.0
     )
     rung_stats.record_outcome(
+        rung_path, "rename-mechanical", "opencode-go", "deepseek-v4-flash", True, 0.01, 5.0
+    )
+    rung_stats.record_outcome(
+        rung_path, "rename-mechanical", "opencode-go", "deepseek-v4-flash", True, 0.01, 5.0
+    )
+    rung_stats.record_outcome(
+        rung_path, "rename-mechanical", "opencode-go", "qwen3.7-plus", True, 0.05, 5.0
+    )
+    rung_stats.record_outcome(
+        rung_path, "rename-mechanical", "opencode-go", "qwen3.7-plus", True, 0.05, 5.0
+    )
+    rung_stats.record_outcome(
         rung_path, "rename-mechanical", "opencode-go", "qwen3.7-plus", True, 0.05, 5.0
     )
     result = rung_stats.lookup_starting_rung(rung_path, providers_path, "rename-mechanical")
@@ -96,6 +108,18 @@ def test_lookup_starting_rung_excludes_disallowed_provider(tmp_path):
     )
     rung_stats.record_outcome(
         rung_path, "rename-mechanical", "opencode-go", "deepseek-v4-flash", True, 0.01, 5.0
+    )
+    rung_stats.record_outcome(
+        rung_path, "rename-mechanical", "opencode-go", "deepseek-v4-flash", True, 0.01, 5.0
+    )
+    rung_stats.record_outcome(
+        rung_path, "rename-mechanical", "opencode-go", "deepseek-v4-flash", True, 0.01, 5.0
+    )
+    rung_stats.record_outcome(
+        rung_path, "rename-mechanical", "opencode-go", "qwen3.7-plus", True, 0.05, 5.0
+    )
+    rung_stats.record_outcome(
+        rung_path, "rename-mechanical", "opencode-go", "qwen3.7-plus", True, 0.05, 5.0
     )
     rung_stats.record_outcome(
         rung_path, "rename-mechanical", "opencode-go", "qwen3.7-plus", True, 0.05, 5.0
@@ -127,6 +151,35 @@ def test_lookup_starting_rung_excludes_entries_below_min_pass_rate(tmp_path):
     rung_stats.record_outcome(
         rung_path, "rename-mechanical", "opencode-go", "qwen3.7-plus", True, 0.05, 5.0
     )
+    rung_stats.record_outcome(
+        rung_path, "rename-mechanical", "opencode-go", "qwen3.7-plus", True, 0.05, 5.0
+    )
+    rung_stats.record_outcome(
+        rung_path, "rename-mechanical", "opencode-go", "qwen3.7-plus", True, 0.05, 5.0
+    )
     result = rung_stats.lookup_starting_rung(rung_path, providers_path, "rename-mechanical")
     assert result is not None
     assert result.model == "qwen3.7-plus"
+
+
+def test_lookup_starting_rung_requires_a_minimum_sample_size(tmp_path):
+    stats_path = tmp_path / "RUNG_STATS.json"
+    providers_path = tmp_path / "PROVIDERS.md"
+    providers_path.write_text(
+        "| Provider | Model | Allowed |\n"
+        "|---|---|---|\n"
+        "| opencode-go | deepseek-v4-flash | yes |\n",
+        encoding="utf-8",
+    )
+
+    rung_stats.record_outcome(stats_path, "build-feature", "opencode-go", "deepseek-v4-flash", True, 0.0, 0.0)
+    # One attempt, one pass -- pass_rate is 1.0, but the sample size (1) is below the default
+    # minimum (3). The old bug: this alone used to qualify as "proven."
+    assert rung_stats.lookup_starting_rung(stats_path, providers_path, "build-feature") is None
+
+    rung_stats.record_outcome(stats_path, "build-feature", "opencode-go", "deepseek-v4-flash", True, 0.0, 0.0)
+    rung_stats.record_outcome(stats_path, "build-feature", "opencode-go", "deepseek-v4-flash", True, 0.0, 0.0)
+    # Now attempts=3, still qualifies (pass_rate 1.0 >= 0.8, attempts 3 >= min_attempts 3)
+    entry = rung_stats.lookup_starting_rung(stats_path, providers_path, "build-feature")
+    assert entry is not None
+    assert entry.attempts == 3
