@@ -1,0 +1,14 @@
+{
+  "name": "ratchet",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Contract-verified, security/quality/consistency-gated build loop for coding agents -- pi package.",
+  "keywords": ["pi-package"],
+  "scripts": {
+    "test": "node --test lib/"
+  },
+  "pi": {
+    "extensions": ["./extensions/ratchet-gate.ts"],
+    "skills": ["./pi-skills"]
+  }
+}
