@@ -90,7 +90,19 @@ that the diff is free of anything out of scope.
 Same repair ladder as before (`retry_same_rung` → `raise_effort` → `escalate_rung` via `/fork` +
 `/model` → `escalate_to_human`) — unchanged by this redesign; see `loop_state.py`.
 
-## Step 8: Report in plain language
+## Step 8: Commit — mandatory, not optional cleanup
+
+Once `verify` returns `allow`, commit the contract test file plus the implementation together:
+
+```bash
+git add tests/contracts/test_<slug>.py <implementation files>
+git commit -m "<what this change does>"
+```
+
+Do this before moving on to the next change in your decomposition. Leaving verified work
+uncommitted is not a smaller version of finishing it.
+
+## Step 9: Report in plain language
 
 What got built, which contract (now a real test file) it satisfies, what the full suite looked like
 before and after, and that it's done — or, on escalation, exactly what failed.
@@ -105,3 +117,4 @@ before and after, and that it's done — or, on escalation, exactly what failed.
 - Treating `verify`'s pass as proof the diff is sane, rather than proof the contract plus the rest
   of the suite held.
 - Writing outside the project root — this gate denies that unconditionally, approved or not.
+- Moving on to the next change in a decomposition before committing the current one.
