@@ -5,6 +5,59 @@ plain-language goal into an approved, executable contract (2–4 `contract-check
 gates Write/Edit capability on an approved contract, and verifies the build against the contract
 plus security, quality, and consistency gates — never against the worker's own report.
 
+## ⚠️ Status: known limitations (read before relying on this)
+
+An independent adversarial review (2026-08-15) verified the following against the actual code and
+runtime behavior -- not assumptions. Read this before installing on anything you depend on.
+
+**The gate is weaker than "structural" implies:**
+- `approve_contract()` has no check on who calls it -- the same agent session that will build
+  against a contract can approve it itself. The human-approval step is enforced by instruction only.
+- `gate_check.evaluate()` never inspects the path being written. One approved contract, anywhere,
+  opens Write/Edit for every file in the project (Claude Code) or the whole filesystem the
+  session's tools can reach (pi) -- not just the file the contract describes.
+- The Claude Code hook (`hooks/pretooluse_gate.py`) has no error handling: malformed input crashes
+  it, and a hook that produces no valid decision makes Claude Code fail OPEN (the write proceeds
+  unguarded).
+- The `pi` gate (`extensions/ratchet-gate.ts` / `lib/gate-logic.mjs`) has two confirmed bugs as of
+  commit `12e2e42`: its ratchet-tooling exemption substring-matches the whole command, so appending
+  a comment referencing any ratchet script name (e.g. `# see gate_check.py`) exempts an arbitrary
+  compound command from the gate entirely; and it blocks every tool call (including `read`, `grep`,
+  `ls`) before any contract exists, not just `write`/`edit`/`bash` as documented -- an agent can't
+  even read a brownfield codebase to draft an informed contract yet.
+
+**It doesn't ratchet over time:**
+- `contracts.run_checks()` runs exactly the one contract passed to it. Nothing re-runs previously
+  approved contracts, so a later change can silently break an earlier one's guarantee and nothing
+  here will notice.
+- Verification never invokes the project's own test suite (`pytest`, `npm test`, etc.) -- only the
+  contract's own 2-4 asserts, a regex secret scan, and a naming-convention check.
+- `audit.sample_rate()` mathematically decays to 0 after 10 consecutive "clean" passes -- and
+  "clean" is driven by quality/consistency checks that (see below) essentially cannot fail. Human
+  spot-checking converges to zero.
+- `rung_stats.lookup_starting_rung()` locks in a model/provider as "proven" after a single
+  successful attempt (`pass_rate = 1.0` from `attempts = 1` already clears the default 0.8
+  threshold) -- there is no minimum sample size.
+
+**Brownfield use is not yet safe:**
+- Contract-check blocks execute via `exec(block, {"__builtins__": builtins})` -- no fixtures, no
+  environment, no dependency setup. Any real module with an environment variable, a DB connection,
+  or an import that needs configuration will fail its contract for environmental reasons the agent
+  cannot distinguish from a real defect.
+- `quality.py` and `consistency.py` never save or load a baseline through the documented skill/
+  command flow, so the quality gate always reports a pass, and the consistency gate mines its
+  "convention" from the same files it's checking (a new file always conforms to itself).
+- Both use Python's `ast.parse()` unconditionally -- they raise on any non-Python file, rather than
+  skipping it, in a project that is not pure Python.
+
+**Packaging:** no `LICENSE` file yet -- this repository is not yet legally open source.
+
+**What still holds up:** the tamper-evident approval sidecar (`approve_contract` / SHA-256 hash
+match) is real and well-designed; the contract-as-executable-assert idea is sound; the code/state
+separation is consistent. Treat this project, today, as a discipline ritual for greenfield,
+low-stakes work -- not a security boundary, not a regression guard, and not yet ready to be
+installed globally or pointed at a codebase you depend on.
+
 ## Architecture
 
 For a newcomer's overview of how the pieces fit together — the contract → gate → build → verify
