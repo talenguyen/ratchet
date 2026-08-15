@@ -57,6 +57,19 @@ def test_is_approved_false_until_sidecar_matches(project):
     assert is_approved(project, contract) is True
 
 
+def test_run_pytest_uses_the_configured_test_command_not_a_hardcoded_interpreter(project):
+    # Found live while dogfooding on a project needing `uv run pytest` (its own managed venv):
+    # a hardcoded sys.executable can't see a package that only exists in that environment.
+    # Prove the config value is genuinely read by pointing test_command at a command that
+    # cannot exist -- if this were still hardcoded, it would silently run real pytest instead.
+    (project / ".ratchet" / "config.json").write_text(
+        json.dumps({"test_command": "definitely-not-a-real-test-runner-xyz"}), encoding="utf-8"
+    )
+    contract = _write_contract(project, "demo", "def test_demo():\n    assert True\n")
+    with pytest.raises(FileNotFoundError):
+        run_pytest(project, target=str(contract))
+
+
 def test_run_pytest_reports_no_tests_collected(project):
     contract = _write_contract(project, "empty", "# no test functions here\n")
     result = run_pytest(project, target=str(contract))

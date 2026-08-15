@@ -6,6 +6,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -44,16 +46,26 @@ def is_approved(project_root: Path, contract_path: Path) -> bool:
 
 
 def run_pytest(cwd: Path, target: str | None = None) -> dict:
-    """Run pytest and interpret its own exit codes: 5 = no tests were collected at all,
-    0 = passed, 1 = failed. Other codes (2/3/4) are pytest-internal errors, not a
-    functional pass/fail -- callers must not treat them as either."""
-    # -B (PYTHONDONTWRITEBYTECODE): never load cached .pyc files. CPython validates a .pyc
-    # by int-second mtime + size, so a same-size rewrite within the same second (as the gate's
-    # own tests and workflows do) silently executes STALE bytecode otherwise.
-    args = [sys.executable, "-B", "-m", "pytest", "-q"]
+    """Run the project's own configured test_command (`.ratchet/config.json`) -- never a
+    hardcoded interpreter -- and interpret pytest's own exit codes: 5 = no tests were collected
+    at all, 0 = passed, 1 = failed. Other codes (2/3/4) are pytest-internal errors, not a
+    functional pass/fail -- callers must not treat them as either.
+
+    Found live while dogfooding on a real project that needs `uv run pytest` (its own managed
+    venv) rather than a bare interpreter: a hardcoded `sys.executable -m pytest` cannot see a
+    package that only exists inside that project's own environment.
+    """
+    config = load_config(cwd)
+    args = shlex.split(config["test_command"]) + ["-q"]
     if target:
         args.append(target)
-    result = subprocess.run(args, cwd=cwd, capture_output=True, text=True)
+    # PYTHONDONTWRITEBYTECODE: never load cached .pyc files. CPython validates a .pyc by
+    # int-second mtime + size, so a same-size rewrite within the same second (as the gate's own
+    # tests and workflows do) silently executes STALE bytecode otherwise. Set via the
+    # environment, not a CLI flag, so it applies regardless of the configured command's shape
+    # (`python3 -m pytest`, `uv run pytest`, or a non-Python test_command it's simply inert for).
+    env = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}
+    result = subprocess.run(args, cwd=cwd, capture_output=True, text=True, env=env)
     combined = (result.stdout + result.stderr)[-_TAIL_CHARS:]
     return {"returncode": result.returncode, "tail": combined}
 
