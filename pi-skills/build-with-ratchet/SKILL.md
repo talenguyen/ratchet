@@ -42,6 +42,8 @@ other write, edit, or bash call is denied until an approved contract exists.
 mkdir -p ratchet-state/contracts ratchet-state/changes ratchet-state/audit ratchet-state/runs
 ```
 
+**Trust this project before your first run, or the gate is silently absent.** This package's gate extension is a project-local resource, and pi only loads project-local resources once the project is trusted. Interactive sessions prompt for that trust the first time; non-interactive modes (`-p`/`--print`, `--mode json`, `--mode rpc`) never prompt and silently skip untrusted resources instead -- meaning the gate does not merely weaken, it does not load at all, and every write/edit/bash call succeeds unchallenged. If you're running this non-interactively (scripted, CI), pass `pi -a` (trust project-local files for this run) explicitly. If you're running interactively, just answer the trust prompt once.
+
 Run every call below from the target project root, never from inside this package. Two invocation
 shapes, both wired to what the scripts already support (nothing new is invented here):
 
