@@ -58,6 +58,38 @@ separation is consistent. Treat this project, today, as a discipline ritual for 
 low-stakes work -- not a security boundary, not a regression guard, and not yet ready to be
 installed globally or pointed at a codebase you depend on.
 
+### Update 2026-08-15 (second pass): what got fixed, what didn't
+
+Fixed, with tests, in the `pi` package specifically:
+- Contracts are real `pytest` test files under `tests/contracts/`, verified by the project's own
+  test command — not a private markdown format executed in a bare namespace.
+- `verify` re-runs the **full** test suite, so every previously approved contract is re-checked
+  every time. It ratchets now.
+- Approval requires the human to answer a real confirmation dialog (`ctx.ui.confirm`) — the agent
+  cannot mint its own approval anymore.
+- A contract that already passes before implementation is rejected at approval time
+  (red-before-green) — kills tautological contracts mechanically.
+- Writes are confined to the project root, not the whole filesystem (**not** the fully fine-grained
+  per-contract scoping originally sketched — see below).
+- The tool-name over-broad block (`read`/`grep`/`ls` denied before any approval existed) is fixed:
+  only `write`, `edit`, and `bash` are ever gated.
+- The substring-exploitable exemption (appending `# see gate_check.py` to bypass the gate) is
+  fixed: exemption checks now require the whole command to match, anchored both ends.
+- `rung_stats.lookup_starting_rung` requires a minimum sample size (default 3) before trusting a
+  pass rate. `audit.sample_rate` has a floor (default 0.1) and never reaches zero.
+
+Still true, not addressed by this pass:
+- **Per-contract path scoping is not fine-grained.** Any approved contract currently opens writes
+  to the whole project root, not just the files that specific contract concerns. Project-root
+  confinement (above) closes the demonstrated filesystem-wide exploit, but not this narrower one.
+- **Post-approval `bash` is still unbounded** outside the specifically intercepted cases — this was
+  stated as a known, accepted limitation in the design spec (needs a sandbox, not a hook) and
+  remains one.
+- **The Claude Code plugin is untouched** — everything in the original "known limitations" section
+  above (self-approval, path-blind gate, fail-open hook) still describes it accurately. Porting
+  this fix there is still future work, not done here.
+- **No LICENSE file yet.**
+
 ## Architecture
 
 For a newcomer's overview of how the pieces fit together — the contract → gate → build → verify
