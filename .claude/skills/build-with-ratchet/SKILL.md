@@ -1,9 +1,9 @@
 ---
-name: build-with-ratchet2
-description: Drive the full ratchet-v2 six-step loop (propose -> approve -> implement -> check -> audit -> complete) for the Claude Code harness, calling scripts/contract.py and scripts/rungs.py by their real signatures against the shared ratchet/ state. Use when the user wants to build something through the contract-verified loop.
+name: build-with-ratchet
+description: Drive the full Ratchet six-step loop (propose -> approve -> implement -> check -> audit -> complete) for the Claude Code harness, calling scripts/contract.py and scripts/rungs.py by their real signatures against the shared ratchet/ state. Use when the user wants to build something through the contract-verified loop.
 ---
 
-# build-with-ratchet2 (Claude Code adapter)
+# build-with-ratchet (Claude Code adapter)
 
 This adapter serves the **Claude Code** harness. The loop body below is shared
 verbatim with the `.agents/` (Codex / generic AGENTS.md) and `.pi/` adapters:

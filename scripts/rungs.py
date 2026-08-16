@@ -1,4 +1,4 @@
-"""Mechanism 2, reimplemented clean against ratchet-v2's own formats.
+"""Mechanism 2, reimplemented clean against Ratchet's own formats.
 
 Self-tuning cheapest-rung table: for each task class, which (provider, model)
 is cheap enough to dispatch to — decided from measured outcomes, never guessed.

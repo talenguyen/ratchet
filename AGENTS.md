@@ -1,4 +1,4 @@
-# ratchet-v2
+# Ratchet
 
 Ratchet is a workflow for driving coding agents: no code is written until a
 contract test exists and is failing (red), nothing completes unless that contract

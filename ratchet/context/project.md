@@ -7,7 +7,7 @@
 
 ## Project name
 
-<PLACEHOLDER: e.g. "ratchet-v2" — the working name; the human names it for real>
+<PLACEHOLDER: e.g. "Ratchet" — the working name; the human names it for real>
 
 ## One-paragraph description
 

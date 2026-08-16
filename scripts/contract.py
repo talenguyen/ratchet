@@ -1,4 +1,4 @@
-"""Mechanism 1, reimplemented clean against ratchet-v2's own contract format.
+"""Mechanism 1, reimplemented clean against Ratchet's own contract format.
 
 Mechanically-enforced red-before-green contracts with a tamper-evident sha256
 sidecar, at the two structural seams of the loop (see AGENTS.md):

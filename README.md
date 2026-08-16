@@ -1,10 +1,13 @@
-# Ratchet v2 — fresh start
+# Ratchet
 
-This branch is the clean rebuild of Ratchet, replacing the accumulated, half-migrated state on
-`main` (two parallel gate mechanisms that were never unified, dead scripts, 16 overlapping spec
-documents — see the `ai-autonomous` monorepo's
-`docs/superpowers/specs/2026-08-16-ratchet-v3-synthesis-design.md` and the plan that follows it for
-the full reasoning).
+Ratchet is a workflow for driving coding agents: no code is written until a contract test exists
+and is failing (red), nothing completes unless that contract is still green and untampered, and
+every implementation step is dispatched to the cheapest model that demonstrably works.
+
+This branch is the clean rebuild, replacing the accumulated, half-migrated state on `main` (two
+parallel gate mechanisms that were never unified, dead scripts, 16 overlapping spec documents — see
+the `ai-autonomous` monorepo's `docs/superpowers/specs/2026-08-16-ratchet-v3-synthesis-design.md`
+and the plan that follows it for the full reasoning).
 
 Kept from the old project, reimplemented clean rather than ported:
 1. **Mechanically-enforced red-before-green** — a contract (a real test file) must fail before it can
@@ -22,5 +25,6 @@ instructions. Chosen after directly cloning and reading six competing projects
 against: simplicity to implement cleanly, brownfield-readiness, multi-harness portability, and fit
 for the two mechanisms above.
 
-Nothing is built yet — this commit marks the starting point. See the referenced spec and plan for
-the full skeleton and task breakdown.
+See `AGENTS.md` for the full six-step loop and where each mechanism plugs in. 43 tests passing;
+validated end to end by a fresh-session dogfood of the real skill instructions on both a greenfield
+and a brownfield toy goal (see the plan referenced above for what that found and fixed).

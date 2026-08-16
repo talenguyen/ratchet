@@ -1,12 +1,12 @@
 ---
-name: build-with-ratchet2
-description: Drive the full ratchet-v2 six-step loop (propose -> approve -> implement -> check -> audit -> complete) for Codex / generic AGENTS.md harnesses, calling scripts/contract.py and scripts/rungs.py by their real signatures against the shared ratchet/ state. Use when the user wants to build something through the contract-verified loop.
+name: build-with-ratchet
+description: Drive the full Ratchet six-step loop (propose -> approve -> implement -> check -> audit -> complete) for the pi harness, calling scripts/contract.py and scripts/rungs.py by their real signatures against the shared ratchet/ state. Use when the user wants to build something through the contract-verified loop.
 ---
 
-# build-with-ratchet2 (Codex / generic AGENTS.md adapter)
+# build-with-ratchet (pi adapter)
 
-This adapter serves the **Codex / generic AGENTS.md** harnesses. The loop body below is shared
-verbatim with the `.claude/` and `.pi/` adapters:
+This adapter serves the **pi** harness (pi-native skill format). The loop body below is shared
+verbatim with the `.claude/` and `.agents/` adapters:
 there is no invocation difference between harnesses — all three execute bash,
 so every script call uses the same `PYTHONPATH=. python3 - <<'EOF'` heredoc
 form and the same real functions from `scripts/contract.py` and
