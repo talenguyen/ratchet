@@ -1,0 +1,14 @@
+{
+  "rungs": [
+    {
+      "task_class": "mechanical_edit",
+      "provider": "openai-codex",
+      "model": "gpt-5.6-luna",
+      "attempts": 12,
+      "passes": 11,
+      "total_cost_usd": 0.42,
+      "total_latency_s": 318,
+      "last_updated": "2026-08-16T06:54:00Z"
+    }
+  ]
+}
