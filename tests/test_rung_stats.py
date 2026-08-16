@@ -183,3 +183,50 @@ def test_lookup_starting_rung_requires_a_minimum_sample_size(tmp_path):
     entry = rung_stats.lookup_starting_rung(stats_path, providers_path, "build-feature")
     assert entry is not None
     assert entry.attempts == 3
+
+
+def _seed_baseline(path, task_class="build-feature", provider="opencode-go", model="qwen3.7-plus"):
+    """One recorded outcome -> attempts=1, avg_cost_usd=0.01, avg_latency_s=5.0."""
+    rung_stats.record_outcome(
+        path, task_class, provider, model, passed=True, cost_usd=0.01, latency_s=5.0
+    )
+
+
+def test_over_budget_no_baseline_is_not_flagged(tmp_path):
+    path = tmp_path / "rung_stats.json"
+    result = rung_stats.over_budget(path, "never-seen", "p", "m", 9.99, 999.0)
+    assert result == {"flagged": False, "reason": "no baseline yet"}
+
+
+def test_over_budget_both_under_is_not_flagged(tmp_path):
+    path = tmp_path / "rung_stats.json"
+    _seed_baseline(path)
+    result = rung_stats.over_budget(path, "build-feature", "opencode-go", "qwen3.7-plus", 0.02, 10.0)
+    assert result == {"flagged": False, "reason": None}
+
+
+def test_over_budget_cost_over_is_flagged_naming_cost(tmp_path):
+    path = tmp_path / "rung_stats.json"
+    _seed_baseline(path)  # avg cost 0.01 -> 3x limit 0.03
+    result = rung_stats.over_budget(path, "build-feature", "opencode-go", "qwen3.7-plus", 0.05, 10.0)
+    assert result["flagged"] is True
+    assert "cost" in result["reason"]
+    assert "latency" not in result["reason"]
+
+
+def test_over_budget_latency_over_is_flagged_naming_latency(tmp_path):
+    path = tmp_path / "rung_stats.json"
+    _seed_baseline(path)  # avg latency 5.0 -> 3x limit 15.0
+    result = rung_stats.over_budget(path, "build-feature", "opencode-go", "qwen3.7-plus", 0.02, 20.0)
+    assert result["flagged"] is True
+    assert "latency" in result["reason"]
+    assert "cost" not in result["reason"]
+
+
+def test_over_budget_both_over_is_flagged_naming_both(tmp_path):
+    path = tmp_path / "rung_stats.json"
+    _seed_baseline(path)
+    result = rung_stats.over_budget(path, "build-feature", "opencode-go", "qwen3.7-plus", 0.05, 20.0)
+    assert result["flagged"] is True
+    assert "cost" in result["reason"]
+    assert "latency" in result["reason"]

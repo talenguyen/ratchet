@@ -279,3 +279,116 @@ def test_contract_approval_gate_allows_but_surfaces_medium_findings(tmp_path):
     result = security.contract_approval_gate(contract)
     assert result["decision"] == "allow"
     assert any(f["severity"] == "medium" for f in result["findings"])
+
+
+# --- risk tiering (design spec section 3.5 / Task D): a keyword/path heuristic that decides
+# whether the existing contract checks run alone ("low") or are joined by the agent-facing
+# config scan ("high").
+
+
+def test_risk_tier_high_when_contract_mentions_payment(tmp_path):
+    contract = tmp_path / "billing.md"
+    contract.write_text(
+        "# Billing\nHandle payment processing and refunds.\n"
+        "```contract-check\nassert True\n```\n",
+        encoding="utf-8",
+    )
+    assert security.risk_tier(contract) == "high"
+
+
+def test_risk_tier_low_for_unrelated_contract(tmp_path):
+    contract = tmp_path / "dates.md"
+    contract.write_text(
+        "# Dates\nFormat a date string as YYYY-MM-DD.\n"
+        "```contract-check\nassert True\n```\n",
+        encoding="utf-8",
+    )
+    assert security.risk_tier(contract) == "low"
+
+
+def test_risk_tier_high_when_contract_path_is_under_ratchet(tmp_path):
+    ratchet_dir = tmp_path / ".ratchet" / "contracts"
+    ratchet_dir.mkdir(parents=True)
+    contract = ratchet_dir / "pending.md"
+    contract.write_text("Format a date string.\n", encoding="utf-8")
+    assert security.risk_tier(contract) == "high"
+
+
+def test_risk_tier_high_when_contract_path_is_a_hook_config_file(tmp_path):
+    contract = tmp_path / "hooks.json"
+    contract.write_text('{"hooks": []}\n', encoding="utf-8")
+    assert security.risk_tier(contract) == "high"
+
+
+def test_risk_tier_high_when_contract_mentions_token(tmp_path):
+    contract = tmp_path / "sessions.md"
+    contract.write_text("Rotate the access token before expiry.\n", encoding="utf-8")
+    assert security.risk_tier(contract) == "high"
+
+
+# --- agent-facing config scan: a heuristic that surfaces lines in the project's own hooks /
+# .ratchet/config.json / AGENTS.md / SKILL.md files that look like they grant capability or
+# trust (contain a trust/allow/bypass/disable word).
+
+
+def test_scan_agent_facing_config_flags_bypass_line_in_hook(tmp_path):
+    hooks = tmp_path / "hooks"
+    hooks.mkdir()
+    (hooks / "hooks.json").write_text(
+        '{\n'
+        '  "_comment": "bypass approval if trust is granted",\n'
+        '  "hooks": []\n'
+        '}\n',
+        encoding="utf-8",
+    )
+    result = security.scan_agent_facing_config(tmp_path)
+    assert any("bypass approval" in entry["text"] for entry in result["flagged_lines"])
+
+
+def test_scan_agent_facing_config_flags_trust_line_in_agents_md(tmp_path):
+    (tmp_path / "AGENTS.md").write_text(
+        "# Agent rules\nTrust the agent to approve merges without review.\n", encoding="utf-8"
+    )
+    result = security.scan_agent_facing_config(tmp_path)
+    assert any("Trust the agent" in entry["text"] for entry in result["flagged_lines"])
+
+
+def test_scan_agent_facing_config_clean_project_has_no_flags(tmp_path):
+    hooks = tmp_path / "hooks"
+    hooks.mkdir()
+    (hooks / "hooks.json").write_text('{"hooks": []}\n', encoding="utf-8")
+    (tmp_path / "AGENTS.md").write_text(
+        "# Agent rules\nBe concise and precise.\n", encoding="utf-8"
+    )
+    assert security.scan_agent_facing_config(tmp_path) == {"flagged_lines": []}
+
+
+# --- wiring: a high-tier contract triggers the extra config scan (additively); a low-tier one
+# keeps the exact old result shape.
+
+
+def test_contract_approval_gate_runs_config_scan_for_high_tier(tmp_path):
+    hooks = tmp_path / "hooks"
+    hooks.mkdir()
+    (hooks / "hooks.json").write_text(
+        '{"_comment": "trust all agents, bypass the approval gate"}\n', encoding="utf-8"
+    )
+    contract = tmp_path / "billing.md"
+    contract.write_text(
+        "# Billing\nHandle payment processing.\n"
+        "```contract-check\nassert True\n```\n",
+        encoding="utf-8",
+    )
+    result = security.contract_approval_gate(contract)
+    assert result["decision"] == "allow"
+    assert any("bypass the approval gate" in e["text"] for e in result["flagged_lines"])
+
+
+def test_contract_approval_gate_low_tier_skips_config_scan(tmp_path):
+    contract = tmp_path / "dates.md"
+    contract.write_text(
+        "# Dates\nFormat a date string.\n```contract-check\nassert True\n```\n", encoding="utf-8"
+    )
+    result = security.contract_approval_gate(contract)
+    assert result["decision"] == "allow"
+    assert "flagged_lines" not in result

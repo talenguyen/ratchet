@@ -5,6 +5,16 @@ plain-language goal into an approved, executable contract (2–4 `contract-check
 gates Write/Edit capability on an approved contract, and verifies the build against the contract
 plus security, quality, and consistency gates — never against the worker's own report.
 
+## Supported harnesses
+
+`pi` and Claude Code, by deliberate choice — not an oversight. The gate's decision logic
+(`gate_check.py`/`ratchet_core.py`) takes no harness-specific input; the only harness-specific
+surface is each harness's own `SKILL.md` plus a thin hook adapter. A third harness, if ever wanted,
+is a new skill file and adapter, not a redesign. This project is not chasing the harness-count
+breadth several competing tools have (10+ harnesses each) — that scope decision is recorded in
+`2026-08-16-ratchet-v3-synthesis-design.md` §3.6: breadth without a mechanism advantage is not a
+defensible use of further effort here.
+
 ## ⚠️ Status: known limitations (read before relying on this)
 
 An independent adversarial review (2026-08-15) verified the following against the actual code and
@@ -161,7 +171,7 @@ Run everything from the target project root. Scripts with a `main()` CLI:
 ```bash
 python3 "${CLAUDE_PLUGIN_ROOT}/scripts/gate_check.py"   ratchet-state/contracts ratchet-state/changes
 python3 "${CLAUDE_PLUGIN_ROOT}/scripts/security.py"     scan-contract <contract.md> | scan-secrets <path>...
-python3 "${CLAUDE_PLUGIN_ROOT}/scripts/memory.py"       recall|record|contradict <memory.json> ...
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/memory.py"       recall|record|contradict <memory-dir> ...
 ```
 
 Library calls (e.g. `approve_contract`, `run_checks`, `record_outcome`, `archive_change`,

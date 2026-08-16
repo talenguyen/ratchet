@@ -28,6 +28,65 @@ Adjust `test_command` to whatever the project actually uses (`npm test`, `go tes
 Same as always: state the goal back in one sentence, ask one clarifying question only if genuinely
 needed, decompose if it's bigger than one contract can honestly cover.
 
+## Before you draft: resume or start fresh
+
+A previous session may have died mid-task. Check before drafting anything new, so you never
+silently start a second, colliding attempt at work another session already has half-done:
+
+```bash
+python3 "$RATCHET_SCRIPTS_ROOT/task_state_store.py" resumable .
+```
+
+If it prints any tasks, each one carries `slug`, `progress_path`, and `next_step` — the exact
+first unchecked line of that task's checklist. Surface each to the human as *"task `<slug>` is
+mid-`<next_step>`, resume or start fresh?"* and get their explicit choice — never a silent
+resume, never a silent fresh start.
+
+## Before you draft: recall learned patterns
+
+The project may also carry advisory instincts from past sessions (`memory/instincts/` — one Markdown file per instinct,
+created on first `record`, absent on a fresh project). Read them before drafting a contract:
+
+```bash
+python3 "$RATCHET_SCRIPTS_ROOT/memory.py" recall memory/instincts
+```
+
+Surface any returned instinct's `pattern` text **verbatim** as advisory context for the goal —
+recalled patterns are self-reported context to consider, never a substitute for a passing
+verify (memory is the weakest evidence tier by design, per `memory.py`'s own docstring). If it
+returns no entries (fresh project), continue normally.
+
+## Track the loop's phase state
+
+No separate snapshot — the checklist file IS the state. At contract-drafting time (Step 2) you
+write `tests/contracts/<slug>.progress.md`, one `- [ ] <step>` line per implementation step, in
+the order you'll do them. As each step actually completes, check it off — `mark_step_done` finds
+the line whose text matches exactly and raises `ValueError` if no matching unchecked line exists,
+so a step that isn't on the checklist (or is already checked) can never be marked done:
+
+```bash
+PYTHONPATH="$RATCHET_SCRIPTS_ROOT" python3 - <<'PY'
+from pathlib import Path
+from progress import mark_step_done
+mark_step_done(Path("tests/contracts/<slug>.progress.md"), "<exact step text>")
+PY
+```
+
+A fresh session resumes from the first unchecked line, read directly from the file:
+
+```bash
+PYTHONPATH="$RATCHET_SCRIPTS_ROOT" python3 - <<'PY'
+from pathlib import Path
+from progress import first_unchecked_step
+print(first_unchecked_step(Path("tests/contracts/<slug>.progress.md")))
+PY
+```
+
+The statuses this loop used to persist (`generating`/`verifying`/`repairing`/`done`/`stuck`)
+need no snapshot anymore: a session that died mid-step simply left that step unchecked. The
+repair ladder still runs off `loop_state.next_action` (Step 7) — but nothing writes a
+`TaskState` to disk; the checklist is the only resume record.
+
 ## Step 2: Draft the contract as a real test
 
 Write `tests/contracts/test_<slug>.py` — an ordinary test file in the project's actual test
@@ -39,6 +98,17 @@ directory unconditionally).
 - **Brownfield**: import and exercise the actual existing module — this test runs with the
   project's real fixtures, environment, and dependencies, not a bare sandbox, so it can actually
   assert against real behavior.
+
+Write the implementation checklist alongside the contract — this file IS the resumable state
+(phase-state section above), one `- [ ] <step>` line per implementation step, in order:
+
+```bash
+cat > tests/contracts/<slug>.progress.md <<'EOF'
+- [ ] <first implementation step>
+- [ ] <second implementation step>
+- [ ] <...>
+EOF
+```
 
 ## Step 3: Present it once, densely — then get one approval
 
@@ -58,11 +128,17 @@ exists, this command denies and tells you to make it fail first — go back to S
 
 ## Step 5: Implement
 
+Check off each implementation step as you land it — `mark_step_done` per the phase-state
+section above; a step is only checked when it's genuinely done.
+
 Once approved, you have write/edit/bash capability for this task (confined to this project's own
 root — writes outside it are never allowed by this gate, approved or not). Implement the change
 yourself now, directly.
 
 ## Step 6: Verify — the full suite, not just this contract
+
+Make sure every completed implementation step is checked off before you verify — the verify run
+is the final step's proof (phase-state section above).
 
 ```bash
 python3 "$RATCHET_SCRIPTS_ROOT/ratchet_core.py" verify tests/contracts/test_<slug>.py
@@ -87,10 +163,28 @@ that the diff is free of anything out of scope.
 
 ## Step 7: If it failed, follow the repair order
 
+Leave the failing step unchecked until the repair actually lands — then mark it done
+(phase-state section above).
+
 Same repair ladder as before (`retry_same_rung` → `raise_effort` → `escalate_rung` via `/fork` +
 `/model` → `escalate_to_human`) — unchanged by this redesign; see `loop_state.py`.
 
 ## Step 8: Commit — mandatory, not optional cleanup
+
+Mark the final step done once verified — or, on escalation, leave it unchecked as the honest
+resume point (phase-state section above).
+
+If this task needed a repair and a specific pattern is what got you through it, record a pattern
+worth remembering for the next session — same file the recall step above reads
+(`memory/instincts/`):
+
+```bash
+python3 "$RATCHET_SCRIPTS_ROOT/memory.py" record memory/instincts <task_class> "<the pattern that helped>" <evidence_ref>
+```
+
+`evidence_ref` must be checkable — a real commit sha or change slug from this session, never a
+placeholder (`record` rejects an empty one). Keep the default confidence (0.3) unless the recorded
+`pattern` text itself justifies a higher value.
 
 Once `verify` returns `allow`, commit the contract test file plus the implementation together:
 

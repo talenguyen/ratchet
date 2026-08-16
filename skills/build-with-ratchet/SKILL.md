@@ -33,7 +33,7 @@ never edited. All contract/change/audit STATE lives in the TARGET project being 
 **First use:** if this project has no `ratchet-state/` directory yet, create it before proceeding:
 
 ```bash
-mkdir -p ratchet-state/contracts ratchet-state/changes ratchet-state/audit ratchet-state/runs
+mkdir -p ratchet-state/contracts ratchet-state/changes ratchet-state/audit ratchet-state/runs tests/contracts
 ```
 
 Run every call below from the target project root, never from inside the plugin. Two invocation
@@ -50,6 +50,63 @@ Find (or create, per the first-use step above) the `ratchet-state/` directory in
 human is working in. If there is no `ratchet-state/` and you cannot create one (not your project),
 say so and stop. Confirm the target files/module the goal touches, so you know whether this is
 greenfield (nothing there yet) or brownfield (real behavior to respect).
+
+**Resume check first:** a previous session may have died mid-task. Before drafting anything new,
+ask whether the target project has a resumable task waiting, so you never silently start a second,
+colliding attempt at work another session already has half-done:
+
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/task_state_store.py" resumable .
+```
+
+If it prints any tasks, each one carries `slug`, `progress_path`, and `next_step` — the exact
+first unchecked line of that task's checklist. Surface each to the human as *"task `<slug>` is
+mid-`<next_step>`, resume or start fresh?"* and get their explicit choice — never a silent
+resume, never a silent fresh start.
+
+**Recall learned patterns before drafting:** the project may also carry advisory instincts from
+past sessions (`memory/instincts/` — one Markdown file per instinct, created on first `record`, absent on a fresh project).
+Read them before drafting a contract:
+
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/memory.py" recall memory/instincts
+```
+
+Surface any returned instinct's `pattern` text **verbatim** as advisory context for the goal —
+recalled patterns are self-reported context to consider, never a substitute for a passing
+contract check (memory is the weakest evidence tier by design, per `memory.py`'s own docstring).
+If it returns no entries (fresh project), continue normally.
+
+## Track the loop's phase state (cross-session continuity)
+
+No separate snapshot — the checklist file IS the state. At contract-drafting time (Step 2) you
+write `tests/contracts/<slug>.progress.md`, one `- [ ] <step>` line per implementation step, in
+the order you'll do them. As each step actually completes, check it off — `mark_step_done` finds
+the line whose text matches exactly and raises `ValueError` if no matching unchecked line exists,
+so a step that isn't on the checklist (or is already checked) can never be marked done:
+
+```bash
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}" python3 - <<'PY'
+from pathlib import Path
+from scripts.progress import mark_step_done
+mark_step_done(Path("tests/contracts/<slug>.progress.md"), "<exact step text>")
+PY
+```
+
+A fresh session resumes from the first unchecked line, read directly from the file:
+
+```bash
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}" python3 - <<'PY'
+from pathlib import Path
+from scripts.progress import first_unchecked_step
+print(first_unchecked_step(Path("tests/contracts/<slug>.progress.md")))
+PY
+```
+
+The statuses this loop used to persist (`generating`/`verifying`/`repairing`/`done`/`stuck`)
+need no snapshot anymore: a session that died mid-step simply left that step unchecked. The
+repair ladder still runs off `loop_state.next_action` (Step 6) — but nothing writes a
+`TaskState` to disk; the checklist is the only resume record.
 
 ## Step 1: Understand the goal — at most one clarifying round
 
@@ -79,6 +136,17 @@ from the goal.
 Write the draft to `ratchet-state/contracts/functional/<domain>.md` (new domain) or as a delta
 inside a change folder scaffolded with `changes.new_change(changes_dir, slug)` (an existing
 domain, a bigger change). Do not call `gate_check.approve_contract` yet.
+
+Write the implementation checklist alongside the contract — this file IS the resumable state
+(phase-state section above), one `- [ ] <step>` line per implementation step, in order:
+
+```bash
+cat > tests/contracts/<slug>.progress.md <<'EOF'
+- [ ] <first implementation step>
+- [ ] <second implementation step>
+- [ ] <...>
+EOF
+```
 
 ## Step 3: Present it once, densely — then get one approval
 
@@ -130,8 +198,13 @@ Invoke `/use-coding-agent` for the actual build, with the goal stated as: implem
 approved contract at `<contract_path>`, and its acceptance check stated as: `contracts.run_checks`
 on that same path returns `{"passed": true, "failures": []}`. Follow that skill's own procedure
 for spawning, driving, and settling the worker — this skill does not reimplement pane-driving.
+Check off each implementation step as the worker lands it — `mark_step_done` per the
+phase-state section above; a step is only checked when it's genuinely done.
 
 ## Step 5: Verify yourself — never the worker's report
+
+Make sure every completed implementation step is checked off before you verify — the verify run
+is the final step's proof (phase-state section above).
 
 ```bash
 PYTHONPATH="${CLAUDE_PLUGIN_ROOT}" python3 - <<'PY'
@@ -177,11 +250,31 @@ print(next_action(state))   # "retry_same_rung" | "raise_effort" | "escalate_run
 PY
 ```
 
+Leave the failing step unchecked until the repair actually lands — then mark it done
+(phase-state section above).
+
 Follow whatever it returns, cheapest remedy first, exactly like any other delegated goal. Loop
 back to Step 4's delegation with a corrected prompt naming the exact defect found — never a vague
 retry.
+Re-save the snapshot on every repair attempt — status `repairing`, with the updated
+`attempts_at_current_rung` and `rung_exhausted_at_top` (phase-state section above).
 
 ## Step 7: Record, archive, audit — then report in plain language
+
+Mark the final step done once verified and archived — or, on escalation, leave it unchecked as
+the honest resume point (phase-state section above).
+
+If this task needed a repair and a specific pattern is what got you through it, record a pattern
+worth remembering for the next session — same file the recall step above reads
+(`memory/instincts/`):
+
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/memory.py" record memory/instincts <task_class> "<the pattern that helped>" <evidence_ref>
+```
+
+`evidence_ref` must be checkable — a real commit sha or change slug from this session, never a
+placeholder (`record` rejects an empty one). Keep the default confidence (0.3) unless the recorded
+`pattern` text itself justifies a higher value.
 
 ```bash
 PYTHONPATH="${CLAUDE_PLUGIN_ROOT}" python3 - <<'PY'

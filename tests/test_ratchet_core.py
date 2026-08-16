@@ -17,6 +17,8 @@ from ratchet_core import (  # noqa: E402
     verify,
 )
 
+from findings import accept_with_reason, record_finding  # noqa: E402
+
 
 @pytest.fixture
 def project(tmp_path):
@@ -66,8 +68,42 @@ def test_run_pytest_uses_the_configured_test_command_not_a_hardcoded_interpreter
         json.dumps({"test_command": "definitely-not-a-real-test-runner-xyz"}), encoding="utf-8"
     )
     contract = _write_contract(project, "demo", "def test_demo():\n    assert True\n")
-    with pytest.raises(FileNotFoundError):
-        run_pytest(project, target=str(contract))
+    result = run_pytest(project, target=str(contract))
+    assert result["returncode"] == 127
+    assert "not found" in result["command_error"]
+
+
+def test_run_pytest_correct_test_command_proceeds_normally(project):
+    contract = _write_contract(project, "demo", "def test_demo():\n    assert True\n")
+    result = run_pytest(project, target=str(contract))
+    assert result["returncode"] == 0
+    assert "command_error" not in result
+
+
+def test_run_pytest_labels_a_typo_test_command_as_command_error(project):
+    # 'python3 -m pytesst' exits 1 -- the same exit code as a genuinely failing contract --
+    # so the label must come from the output shape, not the exit code
+    (project / ".ratchet" / "config.json").write_text(
+        json.dumps({"test_command": "python3 -m pytesst"}), encoding="utf-8"
+    )
+    contract = _write_contract(project, "demo", "def test_demo():\n    assert False\n")
+    result = run_pytest(project, target=str(contract))
+    assert result["returncode"] == 1
+    assert "No module named pytesst" in result["command_error"]
+
+
+def test_approve_denies_a_broken_test_command_as_not_runnable_not_as_failing(project):
+    # without the label, approve would see exit 1 and bless this contract as "failing as
+    # required" -- approving a contract nobody actually ran. It must deny instead, distinctly.
+    (project / ".ratchet" / "config.json").write_text(
+        json.dumps({"test_command": "python3 -m pytesst"}), encoding="utf-8"
+    )
+    contract = _write_contract(project, "demo", "def test_demo():\n    assert False\n")
+    result = approve(project, contract)
+    assert result["decision"] == "deny"
+    assert "not runnable" in result["reason"]
+    assert "pytesst" in result["reason"]
+    assert not approved_sidecar_path(project, "demo").exists()
 
 
 def test_run_pytest_reports_no_tests_collected(project):
@@ -151,3 +187,30 @@ def test_verify_allows_when_contract_and_full_suite_pass(project):
     (project / 'app' / 'billing.py').write_text('def total(x):\n    return x * 2\n', encoding='utf-8')
     result = verify(project, contract)
     assert result['decision'] == 'allow'
+
+
+def test_verify_denies_on_open_p0_finding_even_with_all_tests_green(project):
+    # a green suite and a fine contract are necessary but not sufficient: an unresolved
+    # blocking finding in the ledger must deny verify until it is accepted with a reason
+    (project / "app").mkdir()
+    (project / "app" / "billing.py").write_text("def total(x):\n    return x * 3\n", encoding="utf-8")
+    contract = _write_contract(
+        project, "demo", "from app.billing import total\n\ndef test_demo():\n    assert total(2) == 4\n"
+    )
+    approve_result = approve(project, contract)
+    assert approve_result["decision"] == "allow"
+    (project / "app" / "billing.py").write_text("def total(x):\n    return x * 2\n", encoding="utf-8")
+
+    findings_path = project / ".ratchet" / "findings.json"
+    record_finding(
+        findings_path, "F-01", "P0", "known critical defect", "test_billing.py"
+    )
+
+    result = verify(project, contract)
+    assert result["decision"] == "deny"
+    assert "F-01" in result["reason"]
+    assert "P0" in result["reason"]
+
+    accept_with_reason(findings_path, "F-01", "human-accepted: documented workaround")
+    result = verify(project, contract)
+    assert result["decision"] == "allow"

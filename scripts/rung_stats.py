@@ -26,6 +26,65 @@ class RungEntry:
     def avg_cost_usd(self) -> float:
         return self.total_cost_usd / self.attempts if self.attempts else 0.0
 
+    @property
+    def avg_latency_s(self) -> float:
+        return self.total_latency_s / self.attempts if self.attempts else 0.0
+
+
+def over_budget(
+    rung_stats_path: Path,
+    task_class: str,
+    provider: str,
+    model: str,
+    current_cost_usd: float,
+    current_latency_s: float,
+    cost_multiplier: float = 3.0,
+    latency_multiplier: float = 3.0,
+) -> dict:
+    """Compare an in-progress task's spend against its rung's own historical average.
+
+    Returns {"flagged": bool, "reason": str | None}. `cost_multiplier`/`latency_multiplier` are
+    operator-tunable knobs, same disclaimer as every other threshold in this project (design spec
+    section 15) -- 3.0x is a starting point, not a methodology claim.
+
+    No recorded RungEntry for this (task_class, provider, model) -> {"flagged": False, "reason":
+    "no baseline yet"} -- cold start must not block, same discipline `lookup_starting_rung` already
+    follows for the same reason.
+    """
+    entry = next(
+        (
+            e
+            for e in load(rung_stats_path)
+            if e.task_class == task_class and e.provider == provider and e.model == model
+        ),
+        None,
+    )
+    if entry is None:
+        return {"flagged": False, "reason": "no baseline yet"}
+    cost_limit = cost_multiplier * entry.avg_cost_usd
+    latency_limit = latency_multiplier * entry.avg_latency_s
+    over_cost = current_cost_usd > cost_limit
+    over_latency = current_latency_s > latency_limit
+    if over_cost and over_latency:
+        return {
+            "flagged": True,
+            "reason": (
+                f"cost {current_cost_usd:.4f} > {cost_multiplier:g}x avg {cost_limit:.4f} and "
+                f"latency {current_latency_s:.2f}s > {latency_multiplier:g}x avg {latency_limit:.2f}s"
+            ),
+        }
+    if over_cost:
+        return {
+            "flagged": True,
+            "reason": f"cost {current_cost_usd:.4f} > {cost_multiplier:g}x avg {cost_limit:.4f}",
+        }
+    if over_latency:
+        return {
+            "flagged": True,
+            "reason": f"latency {current_latency_s:.2f}s > {latency_multiplier:g}x avg {latency_limit:.2f}s",
+        }
+    return {"flagged": False, "reason": None}
+
 
 def load(path: Path) -> list[RungEntry]:
     if not path.exists():

@@ -11,7 +11,7 @@ def _run_cli(*args: str) -> subprocess.CompletedProcess:
 
 
 def test_record_then_recall_round_trips_through_the_cli(tmp_path):
-    memory_path = tmp_path / "instincts.json"
+    memory_path = tmp_path / "instincts"
     record = _run_cli("record", str(memory_path), "android-ui", "slug-matched contracts", "d175d74", "0.8")
     assert record.returncode == 0
 
@@ -22,7 +22,7 @@ def test_record_then_recall_round_trips_through_the_cli(tmp_path):
 
 
 def test_contradict_via_cli_removes_it_from_recall(tmp_path):
-    memory_path = tmp_path / "instincts.json"
+    memory_path = tmp_path / "instincts"
     _run_cli("record", str(memory_path), "x", "pattern", "ref1", "0.9")
     contradict = _run_cli("contradict", str(memory_path), "x", "pattern")
     assert json.loads(contradict.stdout)["marked"] == 1
@@ -37,6 +37,6 @@ def test_cli_usage_error_on_missing_args():
 
 
 def test_record_cli_rejects_bad_confidence(tmp_path):
-    memory_path = tmp_path / "instincts.json"
+    memory_path = tmp_path / "instincts"
     result = _run_cli("record", str(memory_path), "x", "y", "z", "1.5")
     assert result.returncode == 2

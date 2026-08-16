@@ -168,7 +168,7 @@ def scan_contract_file_risk(contract_path: Path) -> list[dict]:
     return findings
 
 
-def contract_approval_gate(contract_path: Path) -> dict:
+def contract_approval_gate(contract_path: Path, project_root: Path | None = None) -> dict:
     """Decide whether a contract file is safe to approve.
 
     Denies only on a HIGH-severity finding -- MEDIUM findings (e.g. a hardcoded-looking secret or
@@ -176,11 +176,133 @@ def contract_approval_gate(contract_path: Path) -> dict:
     still returned so a human/orchestrator can read and judge them, but they do not block approval
     on their own. This mirrors `security_gate`'s zero-tolerance stance for the small set of
     patterns that have no legitimate reason to appear in code meant to run unattended on approval.
+
+    When `risk_tier` classifies the contract `"high"` (it touches auth/payment/secrets or the
+    `.ratchet/`/hook config surface), the agent-facing config scan also runs and its
+    `flagged_lines` are added to the result -- purely additive, for a human read, never an
+    automatic decision; the allow/deny logic above is unchanged. `project_root` defaults to the
+    nearest ancestor of the contract with a `.ratchet/` or `.git/` marker (the contract's own
+    parent when there is none).
     """
     findings = scan_contract_file_risk(contract_path)
     if any(f["severity"] == "high" for f in findings):
-        return {"decision": "deny", "findings": findings}
-    return {"decision": "allow", "findings": findings}
+        result: dict = {"decision": "deny", "findings": findings}
+    else:
+        result = {"decision": "allow", "findings": findings}
+    if risk_tier(contract_path) == "high":
+        root = project_root if project_root is not None else _infer_project_root(contract_path)
+        result["flagged_lines"] = scan_agent_facing_config(root)["flagged_lines"]
+    return result
+
+
+# --- Risk tiering and agent-facing config scanning (design spec section 3.5 / Task D) -----------
+#
+# `risk_tier` decides how much scanning a contract approval gets: a `low`-tier contract runs only
+# the existing checks above; a `high`-tier one additionally surfaces lines in the project's own
+# agent-facing config files (hooks, `.ratchet/config.json`, AGENTS.md/SKILL.md) that look like
+# they grant capability or trust. Sourced from `old-coder`'s risk-scaled-effort principle (effort
+# scales with risk: anything touching money/logins/data runs everything) and `ecc`'s AgentShield
+# scope (the harness's own config is part of the attack surface). Both classifiers are simple
+# word-boundary keyword heuristics, not formal analyzers: absence of a match is not proof of
+# safety, and a flag exists to be read by a human, never to auto-deny.
+
+_RISK_KEYWORDS = frozenset({
+    "auth",
+    "password",
+    "payment",
+    "secret",
+    "token",
+    "credential",
+    "session",
+    "login",
+})
+# Word boundaries so `secretary` or `tokenizer` never tier a contract high on their own, while
+# compound names like `payment_webhook` still match on their keyword part.
+_RISK_KEYWORD_RE = re.compile(r"(?i)\b(?:" + "|".join(_RISK_KEYWORDS) + r")\b")
+# Hook/gate config files (e.g. `hooks.json`, `gate_check.py`, `.ratchet/config.json`) are
+# themselves part of the attack surface, so a contract that names one is high-risk regardless of
+# its prose.
+_HOOK_GATE_REF_RE = re.compile(r"(?i)hook|gate")
+# Words that mark a config line as *granting* capability or trust rather than merely mentioning a
+# feature. Module-level like `_RISK_KEYWORDS` so the set is easy to extend.
+_TRUST_GRANT_WORDS = ("trust", "allow", "bypass", "disable")
+_TRUST_GRANT_RE = re.compile(r"(?i)\b(?:" + "|".join(_TRUST_GRANT_WORDS) + r")\b")
+
+
+def risk_tier(contract_path: Path) -> str:
+    """Classify a contract as `"high"` or `"low"` risk.
+
+    `"high"` when the contract's path or its text content mentions any of `_RISK_KEYWORDS`
+    (auth, password, payment, secret, token, credential, session, login), or when the path sits
+    under `.ratchet/` or is itself a hook/gate config file. Everything else is `"low"`. A
+    heuristic, not a security verdict: over-classification only means more scanning happens.
+    """
+    if _RISK_KEYWORD_RE.search(str(contract_path)):
+        return "high"
+    if any(part == ".ratchet" for part in contract_path.parts) or _HOOK_GATE_REF_RE.search(
+        contract_path.name
+    ):
+        return "high"
+    try:
+        text = contract_path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        text = ""
+    if _RISK_KEYWORD_RE.search(text) or _HOOK_GATE_REF_RE.search(text):
+        return "high"
+    return "low"
+
+
+def _agent_facing_config_files(project_root: Path) -> list[Path]:
+    """The project's own agent-facing config surface (ecc's AgentShield scope): `hooks/*.json`,
+    `.ratchet/config.json`, and any `AGENTS.md`/`SKILL.md` anywhere in the tree.
+    """
+    files: list[Path] = []
+    hooks_dir = project_root / "hooks"
+    if hooks_dir.is_dir():
+        files.extend(sorted(hooks_dir.glob("*.json")))
+    ratchet_config = project_root / ".ratchet" / "config.json"
+    if ratchet_config.is_file():
+        files.append(ratchet_config)
+    files.extend(sorted(project_root.rglob("AGENTS.md")))
+    files.extend(sorted(project_root.rglob("SKILL.md")))
+    return files
+
+
+def scan_agent_facing_config(project_root: Path) -> dict:
+    """Scan the project's own agent-facing config files for lines that look like they grant
+    capability or trust.
+
+    A line is flagged when it contains a trust-granting word (`trust`, `allow`, `bypass`,
+    `disable`) -- the shape of config that lets an agent act without a human approving it. This
+    is a simple heuristic, not a formal analyzer: it does not parse JSON or YAML, it can miss
+    obfuscated grants and will over-flag legitimate uses of these words, and its output exists
+    for a human read, never as an automatic decision.
+
+    Returns `{"flagged_lines": [...]}`, each entry `{"path", "line", "text"}`, or
+    `{"flagged_lines": []}` when clean.
+    """
+    flagged_lines: list[dict] = []
+    for path in _agent_facing_config_files(project_root):
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        for line_no, line in enumerate(text.splitlines(), start=1):
+            if _TRUST_GRANT_RE.search(line):
+                flagged_lines.append({"path": str(path), "line": line_no, "text": line.strip()})
+    return {"flagged_lines": flagged_lines}
+
+
+def _infer_project_root(contract_path: Path) -> Path:
+    """Walk up from the contract to the directory whose `.ratchet/` or `.git/` marks it as the
+    project root; fall back to the contract's own parent (a scratch contract, or a tmp dir in
+    tests) when no marker exists.
+    """
+    start = contract_path.resolve().parent
+    for directory in (start, *start.parents):
+        if (directory / ".ratchet").is_dir() or (directory / ".git").is_dir():
+            return directory
+    return start
 
 
 def main(argv: list[str]) -> int:
